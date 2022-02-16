@@ -1,0 +1,9 @@
+# /etc/systemd/system/home-bears-gdrive.automount
+[Unit]
+After=network-online.target
+Before=remote-fs.target
+[Automount]
+Where=/home/bears/gdrive
+TimeoutIdleSec=600
+[Install]
+WantedBy=multi-user.target

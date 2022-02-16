@@ -1,0 +1,22 @@
+version: "3.4"
+services:
+  tdarr-node:
+    container_name: tdarr-node
+    image: haveagitgat/tdarr_node:latest
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - TZ=America/Chicago
+      - PUID=1000
+      - PGID=1000
+      - UMASK_SET=002
+      - nodeID={{ ansible_default_ipv4.address }}
+      - nodeIP={{ wg is defined | ternary(wg, ansible_default_ipv4.address) }}
+      - nodePort=8267
+      - serverIP={{ wg is defined | ternary("10.13.13.5", "192.168.7.101") }}
+      - serverPort=8266
+    volumes:
+      - /docker/tdarr/configs:/app/configs
+      - /docker/tdarr/logs:/app/logs
+      - /home/bears/gdrive/yogscast:/home/bears/gdrive/yogscast
+      - /data:/data

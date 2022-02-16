@@ -1,0 +1,149 @@
+---
+- name: Deploy Tdarr
+  hosts: test
+  tasks:
+    - name: Install Autofs and Docker-Compose
+      apt:
+        pkg:
+        - autofs
+        - docker-compose
+        - fuse
+        - curl
+        - unzip
+        update_cache: yes
+      become: true
+    - name: Ensures /home/bears/gdrive/ dir exists
+      file: path=/home/bears/gdrive/ state=directory
+      become: true
+
+# WIREGUARD
+# This section only runs when the wg var is defined.
+    - name: Install Wireguard
+      apt:
+        pkg:
+        # - linux-headers-cloud-amd64 we need a clever way to do this. cloud-amd64 for gcp, linux-headers-aws for aws :think:
+        - linux-headers-$(uname -r)
+        - wireguard
+        - resolvconf
+      become: true
+      when: wg is defined
+    - name: Configure Wireguard
+      ansible.builtin.template:
+        src: "{{ wg_file }}.conf"
+        dest: /etc/wireguard/
+      become: true
+      when: wg is defined
+    - name: wg-quick setup
+      ansible.builtin.shell: "wg-quick up {{ wg_file }}"
+      ignore_errors: true
+      when: wg is defined
+
+# AUTOFS
+    - name: Add our auto.nfs file to autofs master
+      ansible.builtin.lineinfile:
+        dest: /etc/auto.master
+        line: "/-      /etc/auto.nfs"
+        regexp: "/-      /etc/auto.nfs"
+      become: true
+    - name: Create our auto.nfs file
+      ansible.builtin.lineinfile:
+        dest: /etc/auto.nfs
+        create: yes
+        line: "/data 192.168.8.83:/data"
+        regexp: "^/data"
+      become: true
+    - name: Restart autofs
+      ansible.builtin.systemd:
+        state: restarted
+        daemon_reload: yes
+        enabled: yes
+        name: autofs
+      become: true
+
+# RCLONE
+# Note: This will not update rclone
+    - name: Check is rclone is already installed
+      stat:
+        path: /usr/bin/rclone
+      register: rclone_result
+    - name: Install Rclone if it isn't already
+      ansible.builtin.shell: "curl https://rclone.org/install.sh | sudo bash"
+      when: not rclone_result.stat.exists
+    - name: Ensures /root/.config/rclone/ dir exists
+      file: path=/root/.config/rclone/ state=directory
+      become: true
+    - name: Configure Rclone
+      ansible.builtin.copy:
+        src: rclone.conf
+        dest: /root/.config/rclone/rclone.conf
+      become: true
+    - name: Ensure gdrive folder exists
+      file: path=~/gdrive state=directory
+    - name: Check is rclone is already aliased.
+      stat:
+        path: /sbin/mount.rclone
+      register: stat_result
+    - name: Link rclone to systemd
+      ansible.builtin.shell: "ln -s /usr/bin/rclone /sbin/mount.rclone"
+      when: not stat_result.stat.exists
+      become: true
+    - name: Copy mount to systemd
+      ansible.builtin.copy:
+        src: home-bears-gdrive.mount
+        dest: /etc/systemd/system/
+      become: true
+    - name: Copy automount to systemd
+      ansible.builtin.copy:
+        src: home-bears-gdrive.automount
+        dest: /etc/systemd/system/
+      become: true
+    - name: Make sure gdrive gets started
+      ansible.builtin.systemd:
+        state: started
+        daemon_reload: yes
+        enabled: yes
+        name: home-bears-gdrive.mount
+      become: true
+    - name: Make sure gdrive.automount gets started
+      ansible.builtin.systemd:
+        daemon_reload: yes
+        enabled: yes
+        name: home-bears-gdrive.automount
+      become: true
+
+# DOCKER
+    - name: Add user to docker group
+      ansible.builtin.user:
+        name: ansible_ssh_user
+        groups: docker
+      become: true
+    - name: Make sure docker is running
+      ansible.builtin.systemd:
+        state: restarted
+        daemon_reload: yes
+        enabled: yes
+        name: docker
+      become: true
+    - name: Make sure docker.socket is running
+      ansible.builtin.systemd:
+        state: restarted
+        daemon_reload: yes
+        enabled: yes
+        name: docker.socket
+      become: true
+    - name: Ensure Tdarrs configs may be stored
+      file: path=/docker/tdarr/configs/ state=directory
+      become: true
+    - name: Ensure Tdarrs logs may be stored
+      file: path=/docker/tdarr/logs/ state=directory
+      become: true
+    - name: Create compose script from template
+      ansible.builtin.template:
+        src: docker-compose.jn2
+        dest: /home/bears/docker-compose.yml
+      become: true
+    - name: Docker-Compose Pull
+      community.docker.docker_compose:
+        pull: yes
+        project_src: /home/bears
+      become: true
