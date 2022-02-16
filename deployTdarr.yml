@@ -7,7 +7,9 @@
         pkg:
         - autofs
         - docker-compose
+        # Fuse is a dependency for rclone.
         - fuse
+        # Curl and unzip are dependencies for rclone setup.
         - curl
         - unzip
         update_cache: yes
@@ -37,7 +39,7 @@
       when: wg is defined
     - name: wg-quick setup
       ansible.builtin.shell: "wg-quick up {{ wg_file }}"
-      ignore_errors: true
+      ignore_errors: true # This suboptimally solves an error that crops up when a wireguard interface is already defined.
       when: wg is defined
 
 # AUTOFS
