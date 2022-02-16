@@ -18,11 +18,13 @@
 
 # WIREGUARD
 # This section only runs when the wg var is defined.
+    - name: get current kernel, we need this to install wireguard linux-headers
+      ansible.builtin.shell: uname -r
+      register: result
     - name: Install Wireguard
       apt:
         pkg:
-        # - linux-headers-cloud-amd64 we need a clever way to do this. cloud-amd64 for gcp, linux-headers-aws for aws :think:
-        - linux-headers-$(uname -r)
+        - linux-headers-{{ result.stdout }}
         - wireguard
         - resolvconf
       become: true
