@@ -71,7 +71,8 @@
         path: /usr/bin/rclone
       register: rclone_result
     - name: Install Rclone if it isn't already
-      ansible.builtin.shell: "curl https://rclone.org/install.sh | sudo bash"
+      ansible.builtin.shell: "curl https://rclone.org/install.sh | bash"
+      become: true
       when: not rclone_result.stat.exists
     - name: Ensures /root/.config/rclone/ dir exists
       file: path=/root/.config/rclone/ state=directory
